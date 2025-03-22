@@ -1,0 +1,6 @@
+fastapi
+gradio
+torch
+Pillow
+numpy
+groundingdino
