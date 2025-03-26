@@ -1,19 +1,20 @@
 import gradio as gr
 from fastapi import FastAPI
-from groundingdino.util.inference import load_model, load_image, predict
-from PIL import Image
+from groundingdino.util.inference import load_model, load_image, predict, annotate
+from PIL import Image, ImageDraw, ImageFont
 import torch
+import numpy as np
+import cv2  # Add this import
 
 # Load your model
 model = load_model(
     "GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py", 
-    "path_to_your_model_weights.pth", 
+    r"C:/Users/hp/Desktop/Grounding DINO Installation/GroundingDINO/weights/groundingdino_swint_ogc.pth", 
     device="cpu"
 )
 
 def predict_image(image: Image.Image, caption: str, box_threshold: float = 0.35, text_threshold: float = 0.25):
-    # Preprocess image and make predictions
-    transformed_image = load_image(image)
+    original_image, transformed_image = load_image(image)
     
     # Run prediction
     boxes, logits, phrases = predict(
@@ -22,13 +23,21 @@ def predict_image(image: Image.Image, caption: str, box_threshold: float = 0.35,
         caption=caption,
         box_threshold=box_threshold,
         text_threshold=text_threshold,
-        device="cpu"  # Explicitly pass CPU device
+        device="cpu"
     )
 
-    # Convert to list for JSON serialization
-    boxes_list = boxes.tolist() if isinstance(boxes, torch.Tensor) else boxes
+    # Annotate the image using Grounding DINO's built-in function
+    annotated_image = annotate(
+        image_source=np.array(original_image),  # Convert PIL to NumPy
+        boxes=boxes,
+        logits=logits,
+        phrases=phrases
+    )
 
-    return boxes_list, phrases
+    # Convert back to PIL for Gradio output
+    annotated_image_pil = Image.fromarray(cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB))
+
+    return annotated_image_pil, boxes.tolist(), phrases
 
 # Set up Gradio interface
 iface = gr.Interface(
@@ -40,6 +49,7 @@ iface = gr.Interface(
         gr.Slider(minimum=0, maximum=1, step=0.01, value=0.25, label="Text Threshold")  # Slider for text threshold
     ],
     outputs=[
+        gr.Image(label="Detection Result"),  # Add this to display the image with boxes
         gr.JSON(label="Boxes"),
         gr.JSON(label="Labels")
     ],
